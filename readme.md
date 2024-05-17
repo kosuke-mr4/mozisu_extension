@@ -1,5 +1,7 @@
 ## mozisu_chrome extension
 
+![alt text](image.png)
+
 ## 使用方法
 
 このリポジトリをクローンした後、Chrome の拡張機能として読み込んで使用してください。
