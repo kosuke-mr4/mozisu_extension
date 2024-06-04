@@ -1,8 +1,3 @@
-async function loadGraphemeSplitter() {
-  const { default: GraphemeSplitter } = await import('grapheme-splitter');
-  return GraphemeSplitter;
-}
-
 async function countSelectedText() {
   const selectionObject = window.getSelection();
   if (!selectionObject || selectionObject.rangeCount === 0) {
@@ -13,7 +8,7 @@ async function countSelectedText() {
     return;
   }
 
-  const selection = selectionObject.toString().replace(/\s/g, '');
+  const selection = selectionObject.toString().replace(/\s/g, "");
   if (selection === "") {
     const existingCountElement = document.getElementById("selection-count");
     if (existingCountElement) {
@@ -22,9 +17,96 @@ async function countSelectedText() {
     return;
   }
 
-  const GraphemeSplitter = await loadGraphemeSplitter();
-  const splitter = new GraphemeSplitter();
-  const count = [...splitter.iterateGraphemes(selection)].length;
+  function textCharaSplit(text: string): string[] {
+    const ZWJ = 0x200d; // Zero Width Joiner
+    const VS_START1 = 0xfe00; // Variation Selector Start Range 1
+    const VS_END1 = 0xfe0f; // Variation Selector End Range 1
+    const VS_START2 = 0xe0100; // Variation Selector Start Range 2
+    const VS_END2 = 0xe01ef; // Variation Selector End Range 2
+    const EMOJI_MODIFIER_START = 0x1f3fb; // Emoji Modifier Start
+    const EMOJI_MODIFIER_END = 0x1f3ff; // Emoji Modifier End
+    const REGIONAL_INDICATOR_START = 0x1f1e6; // Regional Indicator Symbol Letter A
+    const REGIONAL_INDICATOR_END = 0x1f1ff; // Regional Indicator Symbol Letter Z
+    const TAG_BASE = 0x1f3f4; // Tag base
+    const TAG_START = 0xe0020; // Tag Start
+    const TAG_END = 0xe007f; // Tag End
+    const CANCEL_TAG = 0xe007f; // Cancel Tag
+    const KEYCAP_END = 0x20e3; // Combining Enclosing Keycap
+
+    const charArr: string[] = [];
+    let chara: string[] = [];
+    let needCode = 0;
+    let regionalIndicatorCount = 0;
+    let inTagSequence = false;
+    let inKeycapSequence = false;
+
+    for (const c of text) {
+      const cp = c.codePointAt(0)!;
+      if (cp === ZWJ) {
+        // ZWJ
+        needCode += 1;
+      } else if (
+        (VS_START1 <= cp && cp <= VS_END1) ||
+        (VS_START2 <= cp && cp <= VS_END2)
+      ) {
+        // Variation Selector
+        // Do nothing, continue to next character
+      } else if (EMOJI_MODIFIER_START <= cp && cp <= EMOJI_MODIFIER_END) {
+        // Emoji Modifier
+        // Do nothing, continue to next character
+      } else if (
+        REGIONAL_INDICATOR_START <= cp &&
+        cp <= REGIONAL_INDICATOR_END
+      ) {
+        // Emoji Flag Sequence
+        regionalIndicatorCount += 1;
+        if (regionalIndicatorCount === 2) {
+          charArr.push(chara.join("") + c);
+          chara = [];
+          regionalIndicatorCount = 0;
+          continue;
+        }
+      } else if (cp === TAG_BASE) {
+        // Emoji Tag Sequence
+        inTagSequence = true;
+        chara.push(c);
+        continue;
+      } else if (
+        inTagSequence &&
+        ((TAG_START <= cp && cp <= TAG_END) || cp === CANCEL_TAG)
+      ) {
+        chara.push(c);
+        if (cp === CANCEL_TAG) {
+          charArr.push(chara.join(""));
+          chara = [];
+          inTagSequence = false;
+        }
+        continue;
+      } else if (/^[0-9#*]$/.test(c) && !inKeycapSequence) {
+        // Keycap Sequence Start
+        inKeycapSequence = true;
+      } else if (inKeycapSequence && cp === KEYCAP_END) {
+        // Keycap Sequence End
+        chara.push(c);
+        charArr.push(chara.join(""));
+        chara = [];
+        inKeycapSequence = false;
+        continue;
+      } else if (needCode > 0) {
+        needCode -= 1;
+      } else if (chara.length > 0) {
+        charArr.push(chara.join(""));
+        chara = [];
+      }
+      chara.push(c);
+    }
+    if (chara.length > 0) {
+      charArr.push(chara.join(""));
+    }
+    return charArr;
+  }
+
+  const count = textCharaSplit(selection).length;
 
   // すでに文字数表示要素が存在する場合は削除
   const existingCountElement = document.getElementById("selection-count");

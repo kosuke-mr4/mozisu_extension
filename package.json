@@ -1,7 +1,4 @@
 {
-  "dependencies": {
-    "grapheme-splitter": "^1.0.4"
-  },
   "devDependencies": {
     "ts-loader": "^9.5.1",
     "webpack": "^5.91.0",
